@@ -271,24 +271,32 @@ def run_job_using_drmaa (cmd_str, job_name = None, job_other_options = "", job_s
     #
     #   Run job and wait
     #
-    jobid = drmaa_session.runJob(job_template)
-    if logger:
-        logger.debug( "job has been submitted with jobid %s" % str(jobid ))
-
+    jobid = None
     try:
-        job_info = drmaa_session.wait(jobid, drmaa.Session.TIMEOUT_WAIT_FOREVER)
-    except Exception:
-        exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
-        msg = str(exceptionValue)
-        # ignore message 24 in PBS
-        # code 24: drmaa: Job finished but resource usage information and/or termination status could not be provided.":
-        if not msg.startswith("code 24"): raise
+        jobid = drmaa_session.runJob(job_template)
         if logger:
-            logger.info("Warning %s\n"
-                        "The original command was:\n%s\njobid=jobid\n"
-                        (msg.message, cmd_str,jobid) )
-        job_info = None
-
+            logger.debug( "job has been submitted with jobid %s" % str(jobid ))
+        try:
+            job_info = drmaa_session.wait(jobid, drmaa.Session.TIMEOUT_WAIT_FOREVER)
+        except Exception:
+            exceptionType, exceptionValue, exceptionTraceback = sys.exc_info()
+            msg = str(exceptionValue)
+            # ignore message 24 in PBS
+            # code 24: drmaa: Job finished but resource usage information and/or termination status could not be provided.":
+            if not msg.startswith("code 24"): raise
+            if logger:
+                logger.info("Warning %s\n"
+                            "The original command was:\n%s\njobid=jobid\n"
+                            (msg.message, cmd_str,jobid) )
+            job_info = None
+    finally:
+        finished_states = [drmaa.JobState.DONE, drmaa.JobState.FAILED]
+        if jobid is not None:
+            if drmaa_session.jobStatus(jobid) not in finished_states:
+                try:
+                    drmaa_session.control(jobid, drmaa.JobControlAction.TERMINATE)
+                except drmaa.errors.InvalidJobException:
+                    pass
 
     #
     #   Read output
